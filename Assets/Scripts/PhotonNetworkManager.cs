@@ -67,8 +67,19 @@ public class PhotonNetworkManager : MonoBehaviourPunCallbacks, IOnEventCallback 
     {
         // ゲーム開始？
         // ゲストにもイベントを送信
+
+		// マスタクライアントから開始命令を実行
+		if(PhotonNetwork.PlayerList.Length == 2){
+			// ルームの募集をオフにして途中入室不可に
+			PhotonNetwork.CurrentRoom.IsOpen    = false;
+			PhotonNetwork.CurrentRoom.IsVisible = false;
+		}
+
+
     }
-    
+
+
+
     // [PunRPC]属性をつけると、RPCでの実行が有効になる
     [PunRPC]
     private void FireProjectile(float angle) {
@@ -124,7 +135,7 @@ public class PhotonNetworkManager : MonoBehaviourPunCallbacks, IOnEventCallback 
             Debug.Log(data[2]);
             Debug.Log(data[3]);
             // ステージ反映処理
-            _sceneManager.UpdatePanel((Vector2[])data[0], (Vector2[])data[1], (int[])data[2], (int[])data[3]);
+            _sceneManager.UpdatePanel((Vector2[])data[0], (Vector2[])data[1], (int[])data[2], (int[])data[3], (int)data[4]);
             break;
 
         }

@@ -7,6 +7,15 @@ using ExitGames.Client.Photon;
 
 public class ActionCheckManager : MonoBehaviour {
 
+    #region const
+    public enum WinState{
+        kNone,
+        kHostWin,
+        kGuestWin,
+        kDraw
+    }
+    #endregion
+
     #region
     private MainSceneManager _sceneManager;
     private object[] _hostObject;
@@ -18,6 +27,10 @@ public class ActionCheckManager : MonoBehaviour {
         _sceneManager = sceneManager;
     }
 
+    /// <summary>
+    /// 行動オブジェクトを保存
+    /// </summary>
+    /// <param name="actionObject"></param>
     public void SetActionObject(object[] actionObject)
     {
         // ホスト
@@ -34,6 +47,9 @@ public class ActionCheckManager : MonoBehaviour {
         }
     }
 
+    /// <summary>
+    /// 行動を判定
+    /// </summary>
     private void CheckAction()
     {
         // 最大行動回数取得
@@ -110,7 +126,8 @@ public class ActionCheckManager : MonoBehaviour {
             // ゲスト移動判定
             if(guestMoveFlg){
                 if(CheckMovePanel(guestPosX, guestPosY)){
-                    stagePanelList[guestPosY][guestPosX].SetState(StagePanel.State.kPlayer);
+                    // stagePanelList[guestPosY][guestPosX].SetState(StagePanel.State.kPlayer);
+                    stagePanelList[guestPosY][guestPosX].SetState(StagePanel.State.kEnemy);
                     guestMoveList.Add(guestMovePos[i]);
                     guestPanelList.Add((int)StagePanel.State.kPlayer);
                 }
@@ -120,10 +137,17 @@ public class ActionCheckManager : MonoBehaviour {
             }
         }
 
+        
+        var winnerFlg = CheckWinner();
+        var winState  = WinState.kNone;
+        // 勝敗計算
+        if(winnerFlg){
+            winState = CheckPanelCount(stagePanelList);
+        }
         // 送信
         byte evCode = 2; // Custom Event 1: Used as "MoveUnitsToTargetPosition" event
         // 送る中身 プレイヤーID、行動、行動前座標、移動配列、etc
-        object[] content = new object[] {hostMoveList.ToArray(), guestMoveList.ToArray(), hostPanelList.ToArray(), guestPanelList.ToArray()}; // Array contains the target position and the IDs of the selected units
+        object[] content = new object[] {hostMoveList.ToArray(), guestMoveList.ToArray(), hostPanelList.ToArray(), guestPanelList.ToArray(), (int)winState}; // Array contains the target position and the IDs of the selected units
         // 対象
         RaiseEventOptions raiseEventOptions = new RaiseEventOptions { Receivers = ReceiverGroup.All }; // You would have to set the Receivers to All in order to receive this event on the local client as well
         // ?
@@ -132,7 +156,6 @@ public class ActionCheckManager : MonoBehaviour {
         SendOptions sendOptions = new SendOptions { Reliability = true };
         PhotonNetwork.RaiseEvent(evCode, content, raiseEventOptions, sendOptions);
         Debug.Log("send");
-
 
 
         // オブジェクト初期化
@@ -156,5 +179,50 @@ public class ActionCheckManager : MonoBehaviour {
             return false;
         }
         return true;
+    }
+
+    /// <summary>
+    /// 勝敗判定
+    /// </summary>
+    /// <returns></returns>
+    private bool CheckWinner()
+    {
+        return _hostObject.Length > 5 && (bool)_hostObject[5] && _guestObject.Length > 5 && (bool)_guestObject[5];
+    }
+
+    /// <summary>
+    /// 勝敗判定
+    /// </summary>
+    /// <param name="stagePanelList"></param>
+    /// <returns></returns>
+    private WinState CheckPanelCount(List<List<StagePanel>> stagePanelList)
+    {
+        // パネル枚数を計算
+        var hostPanelCounter  = 0;
+        var guestPanelCounter = 0;
+        for(var i = 0; i < stagePanelList.Count; ++i){
+            var tmpText = "";
+            for(var j = 0; j < stagePanelList[i].Count; ++j){
+
+                switch(stagePanelList[i][j].PanelState){
+                case StagePanel.State.kPlayer:
+                case StagePanel.State.kNowPos:
+                case StagePanel.State.kSelect:
+                    ++hostPanelCounter;
+                    break;
+                case StagePanel.State.kEnemy:
+                case StagePanel.State.kEnemyNowPos:
+                    ++guestPanelCounter;
+                    break;
+                }
+                tmpText += stagePanelList[i][j].PanelState+",";
+            }
+            Debug.Log(tmpText);
+        }
+        Debug.Log("win check:"+hostPanelCounter+","+guestPanelCounter);
+        if(hostPanelCounter != guestPanelCounter){
+            return hostPanelCounter > guestPanelCounter ? WinState.kHostWin : WinState.kGuestWin;
+        }
+        return WinState.kDraw;
     }
 }

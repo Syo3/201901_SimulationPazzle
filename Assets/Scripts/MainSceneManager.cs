@@ -106,6 +106,7 @@ public class MainSceneManager : MonoBehaviour {
     {
         Debug.Log("SetNowPosMoveStart");
         ChoicePanelSearch(_nowPosX, _nowPosY);
+        CheckChoicePanel(_nowPosX, _nowPosY);
         //SetNowPos(_nowPosX, _nowPosY);
         _nowPos    = new Vector2(_nowPosX, _nowPosY);
         _movePos   = new Vector2[3];
@@ -144,6 +145,8 @@ public class MainSceneManager : MonoBehaviour {
         // if(posY+1 < kStageSize) _stagePanelList[posY+1][posX  ].CheckSetState(StagePanel.State.kChoice);
 
         CheckMoveMax();
+        // 行動可能チェック
+        CheckChoicePanel(posX, posY);
     }
 
     /// <summary>
@@ -159,6 +162,32 @@ public class MainSceneManager : MonoBehaviour {
         if(posY-1 > -1        ) _stagePanelList[posY-1][posX  ].CheckSetState(StagePanel.State.kChoice);
         if(posX+1 < kStageSize) _stagePanelList[posY  ][posX+1].CheckSetState(StagePanel.State.kChoice);
         if(posY+1 < kStageSize) _stagePanelList[posY+1][posX  ].CheckSetState(StagePanel.State.kChoice);
+    }
+
+    /// <summary>
+    /// 行動可能チェック
+    /// </summary>
+    /// <param name="posX"></param>
+    /// <param name="posY"></param>
+    private void CheckChoicePanel(int posX, int posY)
+    {
+        if(_turnPhaseState != TurnPhaseState.kMoveSelect) return;
+        var choiceFlg = false;
+        if(posX-1 > -1        ) choiceFlg |= _stagePanelList[posY  ][posX-1].PanelState == StagePanel.State.kChoice;
+        if(posY-1 > -1        ) choiceFlg |= _stagePanelList[posY-1][posX  ].PanelState == StagePanel.State.kChoice;
+        if(posX+1 < kStageSize) choiceFlg |= _stagePanelList[posY  ][posX+1].PanelState == StagePanel.State.kChoice;
+        if(posY+1 < kStageSize) choiceFlg |= _stagePanelList[posY+1][posX  ].PanelState == StagePanel.State.kChoice;
+        // 選択肢が無い場合 行動不能で送信
+        if(!choiceFlg){
+
+            byte evCode = 1;
+            // 移動できなかったことも送信する
+            object[] content = new object[] {_punManager.PlayerID, ActionPattern.kMove3, _nowPos, _movePos, _moveCount, true};
+            RaiseEventOptions raiseEventOptions = new RaiseEventOptions { Receivers = ReceiverGroup.MasterClient }; // You would have to set the Receivers to All in order to receive this event on the local client as well
+            SendOptions sendOptions = new SendOptions { Reliability = true };
+            PhotonNetwork.RaiseEvent(evCode, content, raiseEventOptions, sendOptions);
+            SetTurnPhaseState(TurnPhaseState.kWait);
+        }
     }
 
     /// <summary>
@@ -180,7 +209,7 @@ public class MainSceneManager : MonoBehaviour {
     /// <param name="guestMoveList"></param>
     /// <param name="hostPanelList"></param>
     /// <param name="guestPanelList"></param>
-    public void UpdatePanel(Vector2[] hostMoveList, Vector2[] guestMoveList, int[] hostPanelList, int[] guestPanelList)
+    public void UpdatePanel(Vector2[] hostMoveList, Vector2[] guestMoveList, int[] hostPanelList, int[] guestPanelList, int winState)
     {
         Debug.Log("panelLength:"+hostPanelList.Length);
 
@@ -282,8 +311,30 @@ public class MainSceneManager : MonoBehaviour {
 
         // カード選択フェーズに戻る
         SetTurnPhaseState(TurnPhaseState.kCardSelect);
-
         PlayerActionReset();
+
+
+        // 勝敗判定
+        if(winState != 0){
+            switch(winState){
+            case 1:
+                GameObject.Find("WinText").GetComponent<Text>().text = _punManager.PlayerID == 1 ? "Win" : "Lose";
+                break;
+            case 2:
+                GameObject.Find("WinText").GetComponent<Text>().text = _punManager.PlayerID == 2 ? "Win" : "Lose";
+                break;
+            case 3:
+                GameObject.Find("WinText").GetComponent<Text>().text = "Draw";
+                break;
+            }
+            SetTurnPhaseState(TurnPhaseState.kWait);
+            // 退出
+            PhotonNetwork.LeaveRoom();
+            // 切断
+            PhotonNetwork.Disconnect();
+        }
+
+
     }
 
     public void SetTurnPhaseState(TurnPhaseState turnPhaseState)
@@ -370,7 +421,7 @@ public class MainSceneManager : MonoBehaviour {
         //PhotonNetwork.RaiseEvent( (byte)RaiseEventType.kActionChoice, "test", true, RaiseEventOptions.Default );
         byte evCode = 1; // Custom Event 1: Used as "MoveUnitsToTargetPosition" event
         // 送る中身 プレイヤーID、行動、行動前座標、移動配列、最大行動回数
-        object[] content = new object[] {_punManager.PlayerID, ActionPattern.kMove3, _nowPos, _movePos, _maxMoveCount}; // Array contains the target position and the IDs of the selected units
+        object[] content = new object[] {_punManager.PlayerID, ActionPattern.kMove3, _nowPos, _movePos, _moveCount}; // Array contains the target position and the IDs of the selected units
         // 対象
         RaiseEventOptions raiseEventOptions = new RaiseEventOptions { Receivers = ReceiverGroup.MasterClient }; // You would have to set the Receivers to All in order to receive this event on the local client as well
         // ?
@@ -383,6 +434,11 @@ public class MainSceneManager : MonoBehaviour {
         // 選択不可に
         ChoiceReset();
         SetTurnPhaseState(TurnPhaseState.kWait);
+    }
+
+    public void RestartButton()
+    {
+        UnityEngine.SceneManagement.SceneManager.LoadScene("MainScene");
     }
     #endregion
 }
